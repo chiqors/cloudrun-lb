@@ -204,7 +204,21 @@ For a single run, set `WAIT_FOR_CERT=true`. Step 2 prints the required DNS recor
 2. Append the new mapping to `SERVICE_MAPPINGS`.
 3. Rerun step 2.
 
-For `CERT_MODE=classic-managed`, step 2 will not add new domains to an existing classic cert in place — delete the cert manually first, then rerun step 2 with the updated `SERVICE_MAPPINGS` so a new cert covering every host is created.
+For `CERT_MODE=classic-managed`, step 2 cannot add domains to an existing classic cert in place. The script checks the existing certificate's domains and stops if they do not match `SERVICE_MAPPINGS`, instead of silently attaching a certificate that omits a hostname. Choose a new `CLASSIC_CERT_NAME`, add the new DNS A records, and rerun step 2. After the replacement certificate is `ACTIVE` and the proxy has switched to it, you can delete the old unused certificate.
+
+Example replacement certificate:
+
+```bash
+PROJECT_ID=my-gcp-project \
+REGION=asia-southeast2 \
+ADDRESS_NAME=my-global-lb-ip \
+LB_SCOPE=global \
+CERT_MODE=classic-managed \
+CLASSIC_CERT_NAME=my-global-lb-classic-cert-v2 \
+SERVICE_MAPPINGS='api.example.com=my-api,app.example.com=app-api' \
+WAIT_FOR_CERT=true \
+./02-finish-cloud-run-lb.sh
+```
 
 ## Uninstall
 

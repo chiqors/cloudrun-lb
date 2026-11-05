@@ -772,13 +772,44 @@ ensure_certificate() {
   fi
 }
 
+canonicalize_domains() {
+  printf '%s\n' "$@" \
+    | tr '[:upper:]' '[:lower:]' \
+    | tr ';,' '\n' \
+    | sed -E 's/[[:space:]]+//g; s/\.$//' \
+    | sed '/^$/d' \
+    | sort -u \
+    | paste -sd, -
+}
+
 ensure_classic_managed_certificate() {
-  local domains
+  local domains existing_domains expected_domains actual_domains
   domains="$(join_by_comma "${HOSTS[@]}")"
 
   if resource_exists gcloud compute ssl-certificates describe "$CLASSIC_CERT_NAME" \
     --project="$PROJECT_ID" --global; then
-    log "Classic managed SSL cert $CLASSIC_CERT_NAME already exists (delete it manually to change domains)"
+    existing_domains="$(gcloud compute ssl-certificates describe "$CLASSIC_CERT_NAME" \
+      --project="$PROJECT_ID" \
+      --global \
+      --format='value(managed.domains)' 2>/dev/null || true)"
+    expected_domains="$(canonicalize_domains "${HOSTS[@]}")"
+    actual_domains="$(canonicalize_domains "$existing_domains")"
+
+    if [[ "$actual_domains" != "$expected_domains" ]]; then
+      cat >&2 <<EOF
+Classic managed SSL cert $CLASSIC_CERT_NAME already exists with domains:
+  ${actual_domains:-<none>}
+Requested domains:
+  $expected_domains
+
+Classic SSL certificate domains cannot be changed in place. Set CLASSIC_CERT_NAME
+to a new certificate name and rerun this script with WAIT_FOR_CERT=true.
+Do not delete the certificate while it is attached to the HTTPS proxy.
+EOF
+      return 1
+    fi
+
+    log "Classic managed SSL cert $CLASSIC_CERT_NAME already exists with the requested domains"
     return 0
   fi
   run gcloud compute ssl-certificates create "$CLASSIC_CERT_NAME" \
